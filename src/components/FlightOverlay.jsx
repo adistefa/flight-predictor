@@ -22,18 +22,26 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 
 	if (!projected || projected.length === 0) return null
 
-	const pathD = projected.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
-
 	const start = projected[0]
 	const end = projected[projected.length - 1]
 
-	// compute depth markers at 25/50/75%
+	// split into near/mid/far segments for subtle width change
+	const len = projected.length
+	const n1 = Math.floor(len * 0.33)
+	const n2 = Math.floor(len * 0.66)
+
+	const segmentPath = (pts) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
+
+	const nearPath = segmentPath(projected.slice(0, n1 + 1))
+	const midPath = segmentPath(projected.slice(n1, n2 + 1))
+	const farPath = segmentPath(projected.slice(n2, projected.length))
+
+	// depth markers at 25/50/75%
 	const markers = []
-	if (projected.length > 3) {
-		const l = projected.length
-		markers.push(projected[Math.floor(l * 0.25)])
-		markers.push(projected[Math.floor(l * 0.5)])
-		markers.push(projected[Math.floor(l * 0.75)])
+	if (len > 3) {
+		markers.push(projected[Math.floor(len * 0.25)])
+		markers.push(projected[Math.floor(len * 0.5)])
+		markers.push(projected[Math.floor(len * 0.75)])
 	}
 
 	return (
@@ -48,12 +56,15 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 				</filter>
 			</defs>
 			<g style={{ filter: 'url(#glow)' }}>
-				<path d={pathD} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+				{nearPath && <path d={nearPath} fill="none" stroke="rgba(255,255,255,0.95)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />}
+				{midPath && <path d={midPath} fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" />}
+				{farPath && <path d={farPath} fill="none" stroke="rgba(255,255,255,0.88)" strokeWidth={2.0} strokeLinecap="round" strokeLinejoin="round" />}
 			</g>
 
-			{/* start and end markers */}
+			{/* start and landing markers */}
 			<circle cx={start.x} cy={start.y} r={5} fill="#fff" opacity={0.95} />
-			<circle cx={end.x} cy={end.y} r={3} fill="#fff" opacity={0.9} />
+			{/* landing ring: clear, below horizon */}
+			<circle cx={end.x} cy={end.y} r={6} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={1.4} opacity={0.9} />
 
 			{/* depth markers at 25/50/75% */}
 			{markers.map((m, i) => (

@@ -45,7 +45,8 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     lateral = lateral * (1 + (disc.speed || 6) * 0.06)
 
     const apexT = clamp(0.45 + (launchAngle - 8) / 200, 0.4, 0.55)
-    const baseApex = 2.3 + (launchAngle / 5) + (disc.glide || 4) * 0.28
+    // reduce baseApex to produce a flatter golf-line per spec
+    const baseApex = 1.2 + (launchAngle / 7) + (disc.glide || 4) * 0.18
     let height = 0
     if (t <= apexT) {
       const p = t / apexT
