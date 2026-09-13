@@ -18,6 +18,11 @@ export function projectFlightPoints(flightPoints, width, height) {
 		// stronger non-linear compression to push feeling into depth
 		const visualDepth = 1 - Math.pow(1 - depth, 2.2)
 
+		// if this is the release point, force exact screen center/releaseY
+		if (depth === 0) {
+			return { x: centerX, y: releaseY, depth: 0 }
+		}
+
 		// map ground to a farGroundY (below horizon) so landing stays visible
 		const groundY = releaseY + (farGroundY - releaseY) * visualDepth
 

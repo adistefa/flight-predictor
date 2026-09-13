@@ -26,8 +26,15 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
 
-    const distance = maxDistance * (t === 0 ? 0 : Math.pow(t, 0.85))
+    // enforce exact origin at t=0
+    if (i === 0) {
+      points.push({ distance: 0, lateral: 0, height: 0 })
+      continue
+    }
 
+    const distance = maxDistance * Math.pow(t, 0.85)
+
+    // Turn starts later to keep the release visually stable
     const turnProgress = smoothstep(TURN_START, TURN_END, t)
     const effectiveTurn = turnStrength * Math.max(0, 1 + releaseNormalized * 0.35)
     const turnOffset = effectiveTurn * turnProgress * TURN_BASE_SCALE
@@ -35,17 +42,16 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     const fadeProgress = smoothstep(FADE_START, 1.0, t)
     const fadeOffset = (disc.fade || 0) * Math.pow(fadeProgress, 1.7) * FADE_SCALE
 
-    let releaseOffset = 0
-    if (t <= 0.45) {
-      const relp = 1 - t / 0.45
-      releaseOffset = releaseNormalized * RELEASE_SCALE * Math.pow(relp, 1.4)
-    }
+    // RELEASE shaped effect: grows after ~0.05, peaks mid, then decays
+    const releaseProgress = smoothstep(0.05, 0.35, t)
+    const releaseDecay = 1 - smoothstep(0.35, 0.75, t)
+    const releaseShape = releaseProgress * releaseDecay
+    const releaseOffset = releaseNormalized * RELEASE_SCALE * releaseShape
 
     let lateral = turnOffset - fadeOffset + releaseOffset
     lateral = lateral * (1 + (disc.speed || 6) * 0.06)
 
     const apexT = clamp(0.45 + (launchAngle - 8) / 200, 0.4, 0.55)
-    // reduce baseApex to produce a flatter golf-line per spec
     const baseApex = 1.2 + (launchAngle / 7) + (disc.glide || 4) * 0.18
     let height = 0
     if (t <= apexT) {
@@ -58,6 +64,9 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
     const glideHold = smoothstep(GLIDE_START, GLIDE_END, t)
     height = height * (1 + glideHold * 0.3)
+
+    // ensure near-zero lateral for very early flight (first ~5%)
+    if (t <= 0.05) lateral = 0
 
     points.push({ distance, lateral, height })
   }
