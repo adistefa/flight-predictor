@@ -1,74 +1,67 @@
-export function generateFlightPoints(
-	disc,
-	releaseAngle = 0,
-	launchAngle = 8
-) {
-	const points = []
-	const steps = 70
+export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
+  const smoothstep = (edge0, edge1, x) => {
+    const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
+    return t * t * (3 - 2 * t)
+  }
 
-	const maxDistance =
-		25 + (disc.speed || 6) * 6 + (disc.glide || 4) * 2.5
+  const points = []
+  const steps = 70
 
-	// apex base influenced by launchAngle and glide
-	const apexBase = 3 + (launchAngle / 6) + (disc.glide || 4) * 0.4
+  const maxDistance = 25 + (disc.speed || 6) * 6 + (disc.glide || 4) * 2.5
 
-	for (let i = 0; i <= steps; i++) {
-		const t = i / steps // 0..1
+  const TURN_START = 0.08
+  const TURN_END = 0.62
+  const GLIDE_START = 0.35
+  const GLIDE_END = 0.75
+  const FADE_START = 0.62
 
-		// distance progression: ease-out so more points early
-		const distance = maxDistance * Math.pow(t, 0.9)
+  const TURN_BASE_SCALE = 1 + (disc.speed || 6) * 0.08
+  const FADE_SCALE = 0.9 + (disc.speed || 6) * 0.03
+  const RELEASE_SCALE = 0.9
 
-		// height using sine curve, apex earlier around 0.45-0.6
-		// make apex slightly earlier with higher launchAngle
-		const heightFactor = Math.sin(Math.PI * t)
-		const apex = apexBase * (1 + (disc.glide || 4) * 0.06)
-		let height = Math.max(0, heightFactor * apex)
+  const releaseNormalized = clamp(releaseAngle / 30, -1, 1)
+  const turnStrength = Math.abs(Math.min(disc.turn || 0, 0))
 
-		// TURN: negative turn value -> move RIGHT (positive lateral) in player view
-		const turnStart = 0.12
-		const turnEnd = 0.65
-		let turnEffect = 0
-		if (t >= turnStart && t <= turnEnd) {
-			const s = (t - turnStart) / (turnEnd - turnStart)
-			const curve = Math.sin(s * Math.PI)
-			// larger speed amplifies turn distance
-			turnEffect = -disc.turn * curve * (0.6 + (disc.speed || 6) * 0.05)
-		}
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
 
-		// FADE: fades LEFT (negative lateral) late in flight
-		const fadeStart = 0.65
-		let fadeEffect = 0
-		if (t >= fadeStart) {
-			const s = (t - fadeStart) / (1 - fadeStart)
-			const curve = Math.pow(s, 1.6)
-			fadeEffect = -disc.fade * curve * (0.4 + (disc.speed || 6) * 0.02)
-		}
+    const distance = maxDistance * (t === 0 ? 0 : Math.pow(t, 0.85))
 
-		// RELEASE ANGLE: affects early flight (hyzer left negative, anhyzer right positive)
-		const relStart = 0
-		const relEnd = 0.45
-		let releaseEffect = 0
-		if (t >= relStart && t <= relEnd) {
-			const s = 1 - (t - relStart) / (relEnd - relStart)
-			const curve = Math.pow(s, 1.6)
-			releaseEffect = -releaseAngle * 0.06 * curve
-			// release angle modulates turn influence
-			// positive releaseAngle (anhyzer) increases turn, negative reduces
-		}
+    const turnProgress = smoothstep(TURN_START, TURN_END, t)
+    const effectiveTurn = turnStrength * Math.max(0, 1 + releaseNormalized * 0.35)
+    const turnOffset = effectiveTurn * turnProgress * TURN_BASE_SCALE
 
-		// combine lateral components
-		let lateral = turnEffect + fadeEffect + releaseEffect
+    const fadeProgress = smoothstep(FADE_START, 1.0, t)
+    const fadeOffset = (disc.fade || 0) * Math.pow(fadeProgress, 1.7) * FADE_SCALE
 
-		// add a small distance-based scaling so farther points can have slightly larger spread
-		lateral = lateral * (0.9 + (distance / Math.max(1, maxDistance)) * 0.6)
+    let releaseOffset = 0
+    if (t <= 0.45) {
+      const relp = 1 - t / 0.45
+      releaseOffset = releaseNormalized * RELEASE_SCALE * Math.pow(relp, 1.4)
+    }
 
-		// height influenced strongly by launchAngle early on
-		height = height * (1 + (launchAngle / 20))
+    let lateral = turnOffset - fadeOffset + releaseOffset
+    lateral = lateral * (1 + (disc.speed || 6) * 0.06)
 
-		points.push({ distance, lateral, height })
-	}
+    const apexT = clamp(0.45 + (launchAngle - 8) / 200, 0.4, 0.55)
+    const baseApex = 2.3 + (launchAngle / 5) + (disc.glide || 4) * 0.28
+    let height = 0
+    if (t <= apexT) {
+      const p = t / apexT
+      height = Math.pow(p, 1.45) * baseApex
+    } else {
+      const p = (t - apexT) / (1 - apexT)
+      height = Math.pow(1 - p, 1.05) * baseApex * 0.98
+    }
 
-	return points
+    const glideHold = smoothstep(GLIDE_START, GLIDE_END, t)
+    height = height * (1 + glideHold * 0.3)
+
+    points.push({ distance, lateral, height })
+  }
+
+  return points
 }
 
 export default generateFlightPoints

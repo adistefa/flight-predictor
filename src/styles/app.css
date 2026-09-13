@@ -86,39 +86,38 @@ body {
 	padding: 8px 12px;
 	overflow-x: auto;
 	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none; /* firefox */
 }
-.disc-btn {
+.disc-scroll::-webkit-scrollbar { display: none; }
+.disc-pill {
 	background: rgba(255,255,255,0.06);
 	color: white;
 	border: none;
-	padding: 8px 12px;
-	border-radius: 8px;
-	min-width: 72px;
-	display: flex;
-	flex-direction: column;
+	padding: 8px 14px;
+	height: 40px;
+	border-radius: 20px;
+	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	justify-content: center;
+	font-weight: 600;
+	font-size: 14px;
 	cursor: pointer;
 	pointer-events: auto;
 }
-.disc-btn .disc-cat {
-	font-size: 11px;
-	opacity: 0.8;
-}
-.disc-btn.active {
+.disc-pill.active {
 	background: white;
 	color: black;
 }
 
 .disc-info {
 	position: absolute;
-	top: 12px;
+	top: calc(env(safe-area-inset-top) + 56px);
 	left: 50%;
 	transform: translateX(-50%);
 	pointer-events: none;
 	text-align: center;
 }
-.disc-info-name { font-weight: 600; }
+.disc-info-name { font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px }
 .disc-info-stats { font-size: 13px; opacity: 0.9 }
 
 .left-area {
@@ -164,7 +163,7 @@ body {
 
 /* small responsive tweaks */
 @media (max-width: 520px) {
-	.disc-btn { padding: 6px 10px; min-width: 56px }
+	.disc-pill { padding: 6px 10px; min-width: 56px }
 	.launch-slider-wrap { width: 100px }
 	.launch-range { width: 100px }
 }

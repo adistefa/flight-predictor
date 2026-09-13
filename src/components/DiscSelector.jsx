@@ -7,12 +7,11 @@ export default function DiscSelector({ discs, selectedDiscId, onSelect }) {
 					return (
 						<button
 							key={d.id}
-							className={`disc-btn ${active ? 'active' : ''}`}
+							className={`disc-pill ${active ? 'active' : ''}`}
 							onClick={() => onSelect(d.id)}
 							aria-pressed={active}
 						>
-							<div className="disc-name">{d.name}</div>
-							<div className="disc-cat">{d.category}</div>
+							{d.name}
 						</button>
 					)
 				})}

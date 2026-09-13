@@ -27,6 +27,15 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const start = projected[0]
 	const end = projected[projected.length - 1]
 
+	// compute depth markers at 25/50/75%
+	const markers = []
+	if (projected.length > 3) {
+		const l = projected.length
+		markers.push(projected[Math.floor(l * 0.25)])
+		markers.push(projected[Math.floor(l * 0.5)])
+		markers.push(projected[Math.floor(l * 0.75)])
+	}
+
 	return (
 		<svg className="flight-overlay" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} preserveAspectRatio="none">
 			<defs>
@@ -46,8 +55,10 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 			<circle cx={start.x} cy={start.y} r={5} fill="#fff" opacity={0.95} />
 			<circle cx={end.x} cy={end.y} r={3} fill="#fff" opacity={0.9} />
 
-			{/* subtle points */}
-			{projected.map((p, i) => (i % 10 === 0 ? <circle key={i} cx={p.x} cy={p.y} r={2} fill="rgba(255,255,255,0.12)" /> : null))}
+			{/* depth markers at 25/50/75% */}
+			{markers.map((m, i) => (
+				<circle key={`m-${i}`} cx={m.x} cy={m.y} r={3} fill="rgba(255,255,255,0.14)" />
+			))}
 		</svg>
 	)
 }
