@@ -148,7 +148,8 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     if (Number.isFinite(minHeight)) height = Math.max(height, minHeight)
 
     // smoothly reduce lateral for very early flight (first ~5%) to avoid abrupt kick
-    const earlyLock = 1 - smootherstep(0.0, 0.05, t)
+    // earlyLock ramps 0 -> 1 across 0..0.05 so lateral is suppressed at t=0 and active after ~5%
+    const earlyLock = smootherstep(0.0, 0.05, t)
     lateral = lateral * earlyLock
 
     points.push({ distanceMeters, lateral, height })
