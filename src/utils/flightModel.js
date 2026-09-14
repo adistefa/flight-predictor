@@ -53,6 +53,12 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
     const apexT = clamp(0.45 + (launchAngle - 8) / 200, 0.4, 0.55)
     const baseApex = 1.2 + (launchAngle / 7) + (disc.glide || 4) * 0.18
+
+    // launch vertical component: allow negative launch angles (downhill throws)
+    const LAUNCH_VERTICAL_SCALE = 0.02
+    const launchRadians = (launchAngle * Math.PI) / 180
+    const launchSlope = Math.sin(launchRadians) // negative if launchAngle negative
+    const launchVertical = launchSlope * distance * LAUNCH_VERTICAL_SCALE
     let height = 0
     if (t <= apexT) {
       const p = t / apexT
@@ -64,6 +70,13 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
     const glideHold = smoothstep(GLIDE_START, GLIDE_END, t)
     height = height * (1 + glideHold * 0.3)
+
+    // combine with launch vertical tendency (downhill/uphill)
+    height = height + launchVertical
+
+    // prevent extreme negative heights so the disc doesn't vanish below ground
+    const minHeight = -Math.abs(baseApex) * 0.6
+    height = Math.max(height, minHeight)
 
     // ensure near-zero lateral for very early flight (first ~5%)
     if (t <= 0.05) lateral = 0
