@@ -9,8 +9,9 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	const baseFarGroundY = height * 0.64
 
 	// stronger lateral and taller height to emphasize depth over height
-	const lateralScale = width * 0.075
-	const heightScale = height * 0.022
+	// UPDATED: increase visual size (~2.5x) per design request
+	const lateralScale = width * 0.1875
+	const heightScale = height * 0.055
 
 	const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 	const smoothstep = (edge0, edge1, x) => {
