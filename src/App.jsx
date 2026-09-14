@@ -16,11 +16,32 @@ export default function App() {
 
   const { cameraPitchNormalized, calibratedPitchDegrees, requestPermissionNeeded, requestPermission, calibrateLaunchZero, hasOrientationData, permissionState } = useDeviceOrientation()
 
+  // Handler that must run requestPermission() directly from a user gesture
+  const handleEnableMotion = async () => {
+    try {
+      const result = await requestPermission()
+      // eslint-disable-next-line no-console
+      console.log('motion permission result:', result)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('requestPermission error', err)
+    }
+  }
+
   const effectiveLaunchAngle = launchMode === 'auto' && hasOrientationData && permissionState === 'granted' ? calibratedPitchDegrees : manualLaunchAngle
 
   const discs = discsData || []
 
   const selectedDisc = useMemo(() => discs.find((d) => d.id === selectedDiscId) || discs[0] || null, [discs, selectedDiscId])
+
+  // compute human-friendly AUTO status for debug UI
+  const autoStatus = (() => {
+    if (launchMode !== 'auto') return 'OFF'
+    if (permissionState === 'granted' && hasOrientationData === true) return 'ON'
+    if (permissionState === 'unknown') return 'WAITING'
+    if (permissionState === 'denied') return 'UNAVAILABLE'
+    return 'WAITING'
+  })()
 
   return (
     <div className="app-root">
@@ -40,10 +61,34 @@ export default function App() {
           <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
             <button onClick={() => setLaunchMode('auto')} style={{ padding: '6px 8px', borderRadius: 6, background: launchMode === 'auto' ? 'rgba(255,255,255,0.12)' : 'transparent', color: '#fff' }}>AUTO</button>
             <button onClick={() => setLaunchMode('manual')} style={{ padding: '6px 8px', borderRadius: 6, background: launchMode === 'manual' ? 'rgba(255,255,255,0.12)' : 'transparent', color: '#fff' }}>MANUAL</button>
+
+            {/* ENABLE MOTION: visible when permission API requires explicit user gesture */}
+            {requestPermissionNeeded && permissionState === 'unknown' && (
+              <button onClick={handleEnableMotion} style={{ marginLeft: 4, padding: '6px 8px', borderRadius: 6, background: '#1976d2', color: '#fff', fontWeight: 600 }}>ENABLE MOTION</button>
+            )}
+
             {launchMode === 'auto' && (
               <>
                 <div style={{ marginLeft: 8 }}>{calibratedPitchDegrees ? `${calibratedPitchDegrees > 0 ? '+' : ''}${calibratedPitchDegrees.toFixed(0)}°` : '0°'}</div>
-                <button onClick={() => calibrateLaunchZero()} style={{ marginLeft: 8, padding: '4px 8px', borderRadius: 6 }}>SET 0°</button>
+                {/* SET 0° only enabled when we have permission and at least one event */}
+                {(() => {
+                  const canCalibrate = permissionState === 'granted' && hasOrientationData === true
+                  return (
+                    <button
+                      onClick={() => canCalibrate && calibrateLaunchZero()}
+                      disabled={!canCalibrate}
+                      style={{
+                        marginLeft: 8,
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        opacity: canCalibrate ? 1 : 0.45,
+                        cursor: canCalibrate ? 'pointer' : 'default',
+                      }}
+                    >
+                      SET 0°
+                    </button>
+                  )
+                })()}
               </>
             )}
           </div>
@@ -61,7 +106,7 @@ export default function App() {
         <div>perm: {permissionState}</div>
         <div>event: {hasOrientationData ? 'yes' : 'no'}</div>
         <div>cal: {calibratedPitchDegrees ? `${calibratedPitchDegrees.toFixed(2)}°` : '0.00°'}</div>
-        <div>auto: {launchMode === 'auto' ? 'ON' : 'OFF'}</div>
+        <div>auto: {autoStatus}</div>
       </div>
     </div>
   )
