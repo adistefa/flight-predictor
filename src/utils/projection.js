@@ -4,7 +4,12 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	const maxDistance = Math.max(...flightPoints.map((p) => p.distanceMeters || p.distance || 0)) || 1
 
 	const centerX = width * 0.5
-	const releaseY = height * 0.78
+	// Neutral release point base is screen center (player view)
+	const releaseYBase = height * 0.5
+	// releaseY will be adjusted by camera pitch (cameraPitch is normalized)
+	// pitchOffset moves the release point up/down: positive cameraPitch -> move down
+	const pitchOffset = cameraPitch * height * 0.20
+	const releaseY = releaseYBase + pitchOffset
 	const horizonY = height * 0.30
 	const baseFarGroundY = height * 0.64
 
@@ -22,15 +27,15 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	// pitch modifies the perceived depth/ground plane without changing physics
 	const pitchDepthFactor = clamp(1 - cameraPitch * 0.25, 0.6, 1.4)
 
-	// dynamic farGroundY influenced by camera pitch
-	const pitchOffset = cameraPitch * height * 0.10
+	// dynamic farGroundY influenced by camera pitch (smaller effect than release pitch)
+	const groundPitchOffset = cameraPitch * height * 0.10
 	// incorporate launchAngle for downhill throws (negative launchAngles)
 	const launchOffset = (launchAngle < 0) ? Math.min(Math.abs(launchAngle) / 15, 1) * height * 0.27 : 0
 	const farGroundY = clamp(baseFarGroundY + pitchOffset + launchOffset, height * 0.52, height * 0.92)
 
 	function getLandingY() {
 		const baseLanding = baseFarGroundY
-		const pitchOff = pitchOffset * 0.8 // slightly reduced effect here
+		const pitchOff = groundPitchOffset * 0.8 // slightly reduced effect here
 		let launchOff = 0
 		if (launchAngle < 0) {
 			const downhill = Math.min(Math.abs(launchAngle) / 15, 1)
