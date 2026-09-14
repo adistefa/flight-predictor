@@ -4,6 +4,10 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
     return t * t * (3 - 2 * t)
   }
+  const smootherstep = (edge0, edge1, x) => {
+    const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
+    return t * t * t * (t * (t * 6 - 15) + 10)
+  }
 
   const points = []
   const steps = 70
@@ -38,17 +42,16 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     // normalized progress along actual distance (0..1)
     const tNorm = clamp(distanceMeters / maxDistanceMeters, 0, 1)
 
-    // Turn starts later to keep the release visually stable
-    const turnProgress = smoothstep(TURN_START, TURN_END, t)
+    // Turn / Fade overlap using smoother transitions (overlap rather than piecewise)
     const effectiveTurn = turnStrength * Math.max(0, 1 + releaseNormalized * 0.35)
-    const turnOffset = effectiveTurn * turnProgress * TURN_BASE_SCALE
-
-    const fadeProgress = smoothstep(FADE_START, 1.0, t)
-    const fadeOffset = (disc.fade || 0) * Math.pow(fadeProgress, 1.7) * FADE_SCALE
+    const turnWeight = smootherstep(0.05, 0.25, t) * (1 - smootherstep(0.55, 0.82, t))
+    const fadeWeight = smootherstep(0.55, 0.92, t)
+    const turnOffset = effectiveTurn * turnWeight * TURN_BASE_SCALE
+    const fadeOffset = (disc.fade || 0) * Math.pow(fadeWeight, 1.7) * FADE_SCALE
 
     // RELEASE shaped effect: grows after ~0.05, peaks mid, then decays
-    const releaseProgress = smoothstep(0.05, 0.35, t)
-    const releaseDecay = 1 - smoothstep(0.35, 0.75, t)
+    const releaseProgress = smootherstep(0.05, 0.35, t)
+    const releaseDecay = 1 - smootherstep(0.35, 0.75, t)
     const releaseShape = releaseProgress * releaseDecay
     const releaseOffset = releaseNormalized * RELEASE_SCALE * releaseShape
 
@@ -83,8 +86,8 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
       const riseHeight = riseProgress * (riseBase + riseGlideBoost)
 
       // Glide/Hold phase — shaped by two smoothsteps
-      const glideIn = smoothstep(GLIDE_IN_START, GLIDE_IN_END, tP)
-      const glideOut = 1 - smoothstep(GLIDE_OUT_START, GLIDE_OUT_END, tP)
+      const glideIn = smootherstep(GLIDE_IN_START, GLIDE_IN_END, tP)
+      const glideOut = 1 - smootherstep(GLIDE_OUT_START, GLIDE_OUT_END, tP)
       const glideHold = glideIn * glideOut
       // Reduce direct glide lift — glide should mainly retain height, not create big apex
       const GLIDE_HEIGHT_SCALE = 0.7 // reduced: glide affects hold not apex height
@@ -93,10 +96,11 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
       // Descent: starts later when glide is high
       const descentStart = (0.55 * (1 - glideNormalized)) + (0.72 * glideNormalized) // lerp(0.55,0.72,glideNormalized)
-      const descentProgress = clamp((tP - descentStart) / (1 - descentStart || 1), 0, 1)
+      // smoother descent onset and progression
+      const descentProgress = smootherstep(descentStart, 1.0, tP)
       // Descent strength reduced for higher glide (glide retains height)
       const baseDescentStrength = 3.6
-      const descentStrengthMultiplier = (1.15 * (1 - glideNormalized)) + (0.80 * glideNormalized) // lerp(1.15,0.80, glideNormalized)
+      const descentStrengthMultiplier = (1.15 * (1 - glideNormalized)) + (0.80 * glideNormalized)
       const descentStrength = baseDescentStrength * descentStrengthMultiplier
       const descent = Math.pow(descentProgress, 1.5) * descentStrength
 
@@ -118,14 +122,16 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     if (launchAngle < 0) {
       const baseDescent = 2.8
       const descentStrength = baseDescent * ((1 - glideNormalized) * 1.25 + glideNormalized * 0.7)
-      const sink = Math.pow(tNorm, 1.2) * descentStrength
+      const sinkProgress = smootherstep(0.0, 1.0, tNorm)
+      const sink = Math.pow(sinkProgress, 1.2) * descentStrength
       // launchComponent is negative for negative launchAngle
       height = launchComponent - sink
       // reduce sink magnitude for higher glide (makes the down-slope flatter)
       height = height * (1 - glideNormalized * 0.15)
     } else {
-      // endpoint correction: gently pull final trajectory to ground near the end
-      const endCorrection = finalUncorrectedHeight * smoothstep(0.70, 1.0, tNorm)
+      // endpoint correction: gently pull final trajectory to ground with smooth weight
+      const correctionWeight = smootherstep(0.55, 1.0, tNorm)
+      const endCorrection = finalUncorrectedHeight * correctionWeight
       height = uncorrectedHeight - endCorrection
     }
 
@@ -134,7 +140,6 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
     // For negative launches, never allow a positive height after release
     if (launchAngle < 0) {
-      // clamp to <= 0 to avoid any artificial positive apex
       height = Math.min(height, 0)
     }
 
@@ -142,8 +147,9 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     const minHeight = -Math.abs(finalUncorrectedHeight) * 0.6
     if (Number.isFinite(minHeight)) height = Math.max(height, minHeight)
 
-    // ensure near-zero lateral for very early flight (first ~5%)
-    if (t <= 0.05) lateral = 0
+    // smoothly reduce lateral for very early flight (first ~5%) to avoid abrupt kick
+    const earlyLock = 1 - smootherstep(0.0, 0.05, t)
+    lateral = lateral * earlyLock
 
     points.push({ distanceMeters, lateral, height })
   }

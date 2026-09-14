@@ -36,11 +36,34 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const n1 = Math.floor(len * 0.33)
 	const n2 = Math.floor(len * 0.66)
 
-	const segmentPath = (pts) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
+		// Convert points to a smoothed SVG path using Catmull-Rom -> cubic Bezier
+		const catmullRom2bezier = (pts, tension = 0.5) => {
+			if (!pts || pts.length === 0) return ''
+			if (pts.length === 1) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
+			if (pts.length === 2) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)} L ${pts[1].x.toFixed(2)} ${pts[1].y.toFixed(2)}`
+			const p = pts.map((pt) => ({ x: pt.x, y: pt.y }))
+			const path = []
+			path.push(`M ${p[0].x.toFixed(2)} ${p[0].y.toFixed(2)}`)
+			for (let i = 0; i < p.length - 1; i++) {
+				const p0 = p[Math.max(i - 1, 0)]
+				const p1 = p[i]
+				const p2 = p[i + 1]
+				const p3 = p[Math.min(i + 2, p.length - 1)]
 
-	const nearPath = segmentPath(projected.slice(0, n1 + 1))
-	const midPath = segmentPath(projected.slice(n1, n2 + 1))
-	const farPath = segmentPath(projected.slice(n2, projected.length))
+				const t = tension
+				const cp1x = p1.x + (p2.x - p0.x) / 6 * t
+				const cp1y = p1.y + (p2.y - p0.y) / 6 * t
+				const cp2x = p2.x - (p3.x - p1.x) / 6 * t
+				const cp2y = p2.y - (p3.y - p1.y) / 6 * t
+
+				path.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`)
+			}
+			return path.join(' ')
+		}
+
+		const nearPath = catmullRom2bezier(projected.slice(0, n1 + 1), 0.6)
+		const midPath = catmullRom2bezier(projected.slice(n1, n2 + 1), 0.6)
+		const farPath = catmullRom2bezier(projected.slice(n2, projected.length), 0.6)
 
 	// depth markers at 25/50/75%
 	const markers = []

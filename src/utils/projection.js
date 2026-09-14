@@ -8,7 +8,9 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	// IMPORTANT: release point must NOT move with cameraPitch — it is the visual origin
 	const releaseY = height * 0.5
 	const horizonY = height * 0.30
-	const baseFarGroundY = height * 0.64
+	// neutral far-ground / landing position should be above release (perspective)
+	// set within 0.30h..0.38h; chosen initial value: 0.32h
+	const baseFarGroundY = height * 0.32
 
 	// stronger lateral and taller height to emphasize depth over height
 	// UPDATED: increase visual size (~2.5x) per design request
@@ -20,6 +22,10 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 		const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
 		return t * t * (3 - 2 * t)
 	}
+	const smootherstep = (edge0, edge1, x) => {
+		const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
+		return t * t * t * (t * (t * 6 - 15) + 10)
+	}
 
 	// pitch modifies the perceived depth/ground plane without changing physics
 	const pitchDepthFactor = clamp(1 - cameraPitch * 0.25, 0.6, 1.4)
@@ -27,13 +33,13 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	// dynamic farGroundY influenced by camera pitch (smaller effect than release pitch)
 	const groundPitchOffset = cameraPitch * height * 0.10
 	// far ground Y influenced only by camera pitch (NOT by launchAngle)
-	const farGroundY = clamp(baseFarGroundY + groundPitchOffset, height * 0.52, height * 0.92)
+	const farGroundY = clamp(baseFarGroundY + groundPitchOffset, height * 0.30, height * 0.92)
 
 	function getLandingY() {
 		const baseLanding = baseFarGroundY
 		const pitchOff = groundPitchOffset * 0.8 // slightly reduced effect here
 		// NOTE: landingY must NOT depend on launchAngle — launchAngle only affects flightModel heights
-		return clamp(baseLanding + pitchOff, height * 0.52, height * 0.92)
+		return clamp(baseLanding + pitchOff, height * 0.30, height * 0.92)
 	}
 
 	return flightPoints.map((p, index) => {
@@ -61,8 +67,8 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 		const projectedX = centerX + p.lateral * lateralScale * perspective
 		const projectedY = groundY - p.height * heightScale * perspective
 
-		// origin lock for first ~5% of flight to avoid any visible shift
-		const originLock = 1 - smoothstep(0.0, 0.05, depth)
+		// origin lock for first ~6% of flight to softly avoid any visible shift
+		const originLock = 1 - smootherstep(0.0, 0.06, depth)
 
 		const x = centerX * originLock + projectedX * (1 - originLock)
 		const y = releaseY * originLock + projectedY * (1 - originLock)
