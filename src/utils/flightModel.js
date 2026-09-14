@@ -8,7 +8,7 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
   const points = []
   const steps = 70
 
-  const maxDistance = 25 + (disc.speed || 6) * 6 + (disc.glide || 4) * 2.5
+  const maxDistanceMeters = 25 + (disc.speed || 6) * 6 + (disc.glide || 4) * 2.5
 
   const TURN_START = 0.08
   const TURN_END = 0.62
@@ -32,7 +32,8 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
       continue
     }
 
-    const distance = maxDistance * Math.pow(t, 0.85)
+    const distance = maxDistanceMeters * Math.pow(t, 0.85)
+    const distanceMeters = distance
 
     // Turn starts later to keep the release visually stable
     const turnProgress = smoothstep(TURN_START, TURN_END, t)
@@ -81,10 +82,19 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     // ensure near-zero lateral for very early flight (first ~5%)
     if (t <= 0.05) lateral = 0
 
-    points.push({ distance, lateral, height })
+    points.push({ distanceMeters, lateral, height })
   }
 
   return points
 }
 
-export default generateFlightPoints
+export function estimateFlightDistance(disc, power = 1) {
+  // Simple heuristic: base + speed * factor + glide influence, scaled by power
+  const base = 25
+  const speedFactor = (disc.speed || 6) * 6
+  const glideFactor = (disc.glide || 4) * 2.5
+  const estimate = (base + speedFactor + glideFactor) * power
+  return Math.max(10, estimate)
+}
+
+export { generateFlightPoints as default }

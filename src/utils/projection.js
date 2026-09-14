@@ -1,12 +1,12 @@
 export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0) {
 	if (!flightPoints || flightPoints.length === 0) return []
 
-	const maxDistance = Math.max(...flightPoints.map((p) => p.distance)) || 1
+	const maxDistance = Math.max(...flightPoints.map((p) => p.distanceMeters || p.distance || 0)) || 1
 
 	const centerX = width * 0.5
 	const releaseY = height * 0.78
 	const horizonY = height * 0.30
-	const baseFarGroundY = height * 0.60
+	const baseFarGroundY = height * 0.64
 
 	// stronger lateral and smaller height to emphasize depth over height
 	const lateralScale = width * 0.05
@@ -23,10 +23,10 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 
 	// dynamic farGroundY influenced by camera pitch
 	const pitchOffset = cameraPitch * height * 0.10
-	const farGroundY = clamp(baseFarGroundY + pitchOffset, height * 0.48, height * 0.70)
+	const farGroundY = clamp(baseFarGroundY + pitchOffset, height * 0.52, height * 0.72)
 
 	return flightPoints.map((p, index) => {
-		const depth = Math.min(1, Math.max(0, p.distance / maxDistance))
+		const depth = Math.min(1, Math.max(0, (p.distanceMeters || p.distance || 0) / maxDistance))
 
 		// optionally adjust depth slightly by pitch to add extra effect
 		const adjustedDepth = clamp(depth * pitchDepthFactor, 0, 1)

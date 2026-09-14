@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { generateFlightPoints } from '../utils/flightModel'
+import { generateFlightPoints, estimateFlightDistance } from '../utils/flightModel'
 import { projectFlightPoints } from '../utils/projection'
 import useDeviceOrientation from '../hooks/useDeviceOrientation'
 
@@ -56,6 +56,34 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const lineX1 = size.w * 0.10
 	const lineX2 = size.w * 0.90
 
+
+	// Distance ray + markers (metrics)
+	const totalDistanceMeters = (flightPoints && flightPoints.length)
+		? Math.max(...flightPoints.map((p) => p.distanceMeters || 0))
+		: disc
+		? estimateFlightDistance(disc)
+		: 100
+
+	const markersMeters = []
+	const maxMarker = Math.floor(totalDistanceMeters / 10) * 10
+	for (let m = 10; m <= maxMarker; m += 10) markersMeters.push(m)
+
+	// helper: project a ground point at given meters using same projection math
+	const projectGround = (meters) => {
+		// include release (0) and total so projection normalizes consistently
+		const pts = [
+			{ distanceMeters: 0, lateral: 0, height: 0 },
+			{ distanceMeters: totalDistanceMeters, lateral: 0, height: 0 },
+			{ distanceMeters: meters, lateral: 0, height: 0 },
+			{ distanceMeters: Math.min(totalDistanceMeters, meters + 0.1), lateral: 0, height: 0 },
+		]
+		const proj = projectFlightPoints(pts, size.w, size.h, cameraPitchNormalized)
+		return { point: proj[2], next: proj[3] }
+	}
+
+	// landing point for metrics (ensure using ground projection at totalDistanceMeters)
+	const landingGround = projectGround(totalDistanceMeters).point
+
 	return (
 		<svg className="flight-overlay" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} preserveAspectRatio="none">
 			<defs>
@@ -73,6 +101,49 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 				<line x1={lineX1} x2={lineX2} y1={referenceY} y2={referenceY} stroke="white" strokeWidth={1} strokeOpacity={0.12} strokeDasharray="4 6" />
 				<line x1={lineX1} x2={lineX2} y1={referenceY + size.h * 0.012} y2={referenceY + size.h * 0.012} stroke="white" strokeWidth={1} strokeOpacity={0.20} strokeDasharray="4 6" />
 			</g>
+			{/* Distance Ray (ground reference) - rendered under flight line */}
+			<g>
+				<line x1={start.x} y1={start.y} x2={landingGround.x} y2={landingGround.y} stroke="white" strokeWidth={1} strokeOpacity={0.25} strokeDasharray="3 5" />
+				{/* markers */}
+				{markersMeters.map((m, i) => {
+					const { point, next } = projectGround(m)
+					if (!point) return null
+					let dx = next.x - point.x
+					let dy = next.y - point.y
+					let len = Math.hypot(dx, dy)
+					if (len < 1e-6) {
+						// fallback to global ray direction
+						const gdx = landingGround.x - start.x
+						const gdy = landingGround.y - start.y
+						dx = -gdy
+						dy = gdx
+						len = Math.hypot(dx, dy) || 1
+					}
+					const ux = dx / len
+					const uy = dy / len
+					// perpendicular
+					const px = -uy
+					const py = ux
+					// tick length scales with depth (near larger, far smaller)
+					const depthRatio = m / Math.max(1, totalDistanceMeters)
+					const tickLen = Math.max(6, 14 * Math.pow(1 - depthRatio, 0.6))
+					const x1 = point.x - px * (tickLen / 2)
+					const y1 = point.y - py * (tickLen / 2)
+					const x2 = point.x + px * (tickLen / 2)
+					const y2 = point.y + py * (tickLen / 2)
+					const labelX = point.x + px * (tickLen / 2 + 6)
+					const labelY = point.y + py * (tickLen / 2 + 4)
+					return (
+						<g key={`dm-${i}`}>
+							<line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth={1} strokeOpacity={0.4} />
+							<text x={labelX} y={labelY} fontSize={10} fill="white" opacity={0.4} textAnchor="middle">
+								{m}
+							</text>
+						</g>
+					)
+				})}
+			</g>
+
 			<g style={{ filter: 'url(#glow)' }}>
 				{nearPath && <path d={nearPath} fill="none" stroke="rgba(255,255,255,0.95)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />}
 				{midPath && <path d={midPath} fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" />}
