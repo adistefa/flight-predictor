@@ -28,12 +28,15 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
 
     // enforce exact origin at t=0
     if (i === 0) {
-      points.push({ distance: 0, lateral: 0, height: 0 })
+      points.push({ distanceMeters: 0, lateral: 0, height: 0 })
       continue
     }
 
     const distance = maxDistanceMeters * Math.pow(t, 0.85)
     const distanceMeters = distance
+
+    // normalized progress along actual distance (0..1)
+    const tNorm = clamp(distanceMeters / maxDistanceMeters, 0, 1)
 
     // Turn starts later to keep the release visually stable
     const turnProgress = smoothstep(TURN_START, TURN_END, t)
@@ -52,32 +55,92 @@ export function generateFlightPoints(disc, releaseAngle = 0, launchAngle = 8) {
     let lateral = turnOffset - fadeOffset + releaseOffset
     lateral = lateral * (1 + (disc.speed || 6) * 0.06)
 
-    const apexT = clamp(0.45 + (launchAngle - 8) / 200, 0.4, 0.55)
-    const baseApex = 1.2 + (launchAngle / 7) + (disc.glide || 4) * 0.18
+    // -------------------------
+    // Vertical multi-phase model
+    // -------------------------
+    // 1) glide normalization (disc.glide in ~1..7)
+    const glideNormalized = clamp(((disc.glide || 4) - 1) / 6, 0, 1)
 
-    // launch vertical component: allow negative launch angles (downhill throws)
-    const LAUNCH_VERTICAL_SCALE = 0.02
+    // 2) launch tangent component (immediately affects initial slope)
+    const LAUNCH_VERTICAL_SCALE = 0.018
     const launchRadians = (launchAngle * Math.PI) / 180
-    const launchSlope = Math.sin(launchRadians) // negative if launchAngle negative
-    const launchVertical = launchSlope * distance * LAUNCH_VERTICAL_SCALE
-    let height = 0
-    if (t <= apexT) {
-      const p = t / apexT
-      height = Math.pow(p, 1.45) * baseApex
-    } else {
-      const p = (t - apexT) / (1 - apexT)
-      height = Math.pow(1 - p, 1.05) * baseApex * 0.98
+    const launchSlope = Math.sin(launchRadians)
+    const launchComponent = launchSlope * distanceMeters * LAUNCH_VERTICAL_SCALE
+
+    // helper to compute uncorrected height components for a given progress
+    const RISE_END = 0.32
+    const GLIDE_IN_START = 0.20
+    const GLIDE_IN_END = 0.38
+    const GLIDE_OUT_START = 0.62
+    const GLIDE_OUT_END = 0.88
+
+    function computeUncorrectedHeight(tP, distM) {
+      // Rise phase (fast): t ~ 0 .. 0.32
+      const riseProgress = smoothstep(0.0, RISE_END, tP)
+      // Rise driven mainly by positive launch slope; slight boost from glide
+      const riseBase = Math.max(0, launchSlope) * 8.6
+      const riseGlideBoost = glideNormalized * 0.5
+      const riseHeight = riseProgress * (riseBase + riseGlideBoost)
+
+      // Glide/Hold phase — shaped by two smoothsteps
+      const glideIn = smoothstep(GLIDE_IN_START, GLIDE_IN_END, tP)
+      const glideOut = 1 - smoothstep(GLIDE_OUT_START, GLIDE_OUT_END, tP)
+      const glideHold = glideIn * glideOut
+      // Reduce direct glide lift — glide should mainly retain height, not create big apex
+      const GLIDE_HEIGHT_SCALE = 0.7 // reduced: glide affects hold not apex height
+      // For negative launches we do not add positive glide lift
+      const glideLift = (launchAngle < 0) ? 0 : (glideHold * glideNormalized * GLIDE_HEIGHT_SCALE)
+
+      // Descent: starts later when glide is high
+      const descentStart = (0.55 * (1 - glideNormalized)) + (0.72 * glideNormalized) // lerp(0.55,0.72,glideNormalized)
+      const descentProgress = clamp((tP - descentStart) / (1 - descentStart || 1), 0, 1)
+      // Descent strength reduced for higher glide (glide retains height)
+      const baseDescentStrength = 3.6
+      const descentStrengthMultiplier = (1.15 * (1 - glideNormalized)) + (0.80 * glideNormalized) // lerp(1.15,0.80, glideNormalized)
+      const descentStrength = baseDescentStrength * descentStrengthMultiplier
+      const descent = Math.pow(descentProgress, 1.5) * descentStrength
+
+      // combine (note: launchComponent handled separately)
+      // descent reduces height, glideLift and riseHeight add height
+      const uncorrected = riseHeight + glideLift - descent
+      return uncorrected
     }
 
-    const glideHold = smoothstep(GLIDE_START, GLIDE_END, t)
-    height = height * (1 + glideHold * 0.3)
+    // precompute final uncorrected height for endpoint correction (t=1)
+    const finalUncorrectedHeight = computeUncorrectedHeight(1, maxDistanceMeters) + (Math.sin((launchAngle * Math.PI) / 180) * maxDistanceMeters * LAUNCH_VERTICAL_SCALE)
 
-    // combine with launch vertical tendency (downhill/uphill)
-    height = height + launchVertical
+    // compute uncorrected height at this point
+    const uncorrectedHeight = computeUncorrectedHeight(tNorm, distanceMeters) + launchComponent
 
-    // prevent extreme negative heights so the disc doesn't vanish below ground
-    const minHeight = -Math.abs(baseApex) * 0.6
-    height = Math.max(height, minHeight)
+    // For negative launches use a downhill-specialized model: no positive lift,
+    // glide reduces sink rate and extends the flat/downhill section.
+    let height
+    if (launchAngle < 0) {
+      const baseDescent = 2.8
+      const descentStrength = baseDescent * ((1 - glideNormalized) * 1.25 + glideNormalized * 0.7)
+      const sink = Math.pow(tNorm, 1.2) * descentStrength
+      // launchComponent is negative for negative launchAngle
+      height = launchComponent - sink
+      // reduce sink magnitude for higher glide (makes the down-slope flatter)
+      height = height * (1 - glideNormalized * 0.15)
+    } else {
+      // endpoint correction: gently pull final trajectory to ground near the end
+      const endCorrection = finalUncorrectedHeight * smoothstep(0.70, 1.0, tNorm)
+      height = uncorrectedHeight - endCorrection
+    }
+
+    // Make sure the final point is exactly ground-level
+    if (i === steps) height = 0
+
+    // For negative launches, never allow a positive height after release
+    if (launchAngle < 0) {
+      // clamp to <= 0 to avoid any artificial positive apex
+      height = Math.min(height, 0)
+    }
+
+    // avoid extreme negative values (but allow some sink)
+    const minHeight = -Math.abs(finalUncorrectedHeight) * 0.6
+    if (Number.isFinite(minHeight)) height = Math.max(height, minHeight)
 
     // ensure near-zero lateral for very early flight (first ~5%)
     if (t <= 0.05) lateral = 0
