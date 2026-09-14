@@ -26,6 +26,14 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 		[flightPoints, size, cameraPitchNormalized, launchAngle]
 	)
 
+	// expose mount/render info for browser debug
+	const width = size.w
+	const height = size.h
+	// eslint-disable-next-line no-console
+	console.log('FlightOverlay render', { width, height, pointsCount: flightPoints?.length })
+	// eslint-disable-next-line no-console
+	console.log('SVG DEBUG', { width, height, viewBox: `0 0 ${width} ${height}` })
+
 	if (!projected || projected.length === 0) return null
 
 	const start = projected[0]
@@ -101,7 +109,22 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const landingGround = projectGround(totalDistanceMeters).point
 
 	return (
-		<svg className="flight-overlay" width={size.w} height={size.h} viewBox={`0 0 ${size.w} ${size.h}`} preserveAspectRatio="none">
+		<svg
+			className="flight-overlay"
+			width={size.w}
+			height={size.h}
+			viewBox={`0 0 ${width} ${height}`}
+			preserveAspectRatio="none"
+			style={{
+				position: 'absolute',
+				inset: 0,
+				width: '100%',
+				height: '100%',
+				zIndex: 9999,
+				pointerEvents: 'none',
+				overflow: 'visible',
+			}}
+		>
 			<defs>
 				<filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
 					<feGaussianBlur stdDeviation="6" result="coloredBlur" />
@@ -186,6 +209,12 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 					</foreignObject>
 				</g>
 			)}
+
+			{/* DEBUG: static red arc and magenta center marker (must be last SVG children) */}
+			<path d="M 50 400 C 250 100 750 100 1000 400" fill="none" stroke="#ff0000" strokeWidth="12" strokeLinecap="round" opacity="1" />
+			<circle cx="540" cy="960" r="30" fill="#ff00ff" />
+			{/* optional simple green flight path for direct visibility testing */}
+			{flightPath && <path d={flightPath} fill="none" stroke="#00ff00" strokeWidth={12} strokeLinecap="round" strokeLinejoin="round" opacity={1} />}
 		</svg>
 	)
 }
