@@ -36,34 +36,27 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const n1 = Math.floor(len * 0.33)
 	const n2 = Math.floor(len * 0.66)
 
-		// Convert points to a smoothed SVG path using Catmull-Rom -> cubic Bezier
-		const catmullRom2bezier = (pts, tension = 0.5) => {
-			if (!pts || pts.length === 0) return ''
-			if (pts.length === 1) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
-			if (pts.length === 2) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)} L ${pts[1].x.toFixed(2)} ${pts[1].y.toFixed(2)}`
-			const p = pts.map((pt) => ({ x: pt.x, y: pt.y }))
-			const path = []
-			path.push(`M ${p[0].x.toFixed(2)} ${p[0].y.toFixed(2)}`)
-			for (let i = 0; i < p.length - 1; i++) {
-				const p0 = p[Math.max(i - 1, 0)]
-				const p1 = p[i]
-				const p2 = p[i + 1]
-				const p3 = p[Math.min(i + 2, p.length - 1)]
+		// RECOVERY: use a single simple M/L path from all projected points
+		// This temporarily disables the Catmull-Rom -> Bezier smoothing
+		const safePts = projected.filter(p => Number.isFinite(p?.x) && Number.isFinite(p?.y))
+		const flightPath = safePts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ')
 
-				const t = tension
-				const cp1x = p1.x + (p2.x - p0.x) / 6 * t
-				const cp1y = p1.y + (p2.y - p0.y) / 6 * t
-				const cp2x = p2.x - (p3.x - p1.x) / 6 * t
-				const cp2y = p2.y - (p3.y - p1.y) / 6 * t
-
-				path.push(`C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`)
-			}
-			return path.join(' ')
+		// Debug output for quick inspection in browser console
+		try {
+			// eslint-disable-next-line no-console
+			console.log('FLIGHT DEBUG', {
+				rawCount: flightPoints?.length,
+				projectedCount: projected?.length,
+				first: projected?.[0],
+				middle: projected?.[Math.floor(projected.length / 2)],
+				last: projected?.[projected.length - 1],
+				pathLength: flightPath.length,
+				pathStart: flightPath.slice(0, 120),
+			})
+		} catch (e) {
+			// eslint-disable-next-line no-console
+			console.error('FLIGHT DEBUG ERROR', e)
 		}
-
-		const nearPath = catmullRom2bezier(projected.slice(0, n1 + 1), 0.6)
-		const midPath = catmullRom2bezier(projected.slice(n1, n2 + 1), 0.6)
-		const farPath = catmullRom2bezier(projected.slice(n2, projected.length), 0.6)
 
 	// depth markers at 25/50/75%
 	const markers = []
@@ -168,9 +161,7 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 			</g>
 
 			<g style={{ filter: 'url(#glow)' }}>
-				{nearPath && <path d={nearPath} fill="none" stroke="rgba(255,255,255,0.95)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />}
-				{midPath && <path d={midPath} fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth={2.8} strokeLinecap="round" strokeLinejoin="round" />}
-				{farPath && <path d={farPath} fill="none" stroke="rgba(255,255,255,0.88)" strokeWidth={2.0} strokeLinecap="round" strokeLinejoin="round" />}
+				{flightPath && <path d={flightPath} fill="none" stroke="white" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />}
 			</g>
 
 			{/* start and landing markers */}
