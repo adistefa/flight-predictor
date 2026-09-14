@@ -4,12 +4,9 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	const maxDistance = Math.max(...flightPoints.map((p) => p.distanceMeters || p.distance || 0)) || 1
 
 	const centerX = width * 0.5
-	// Neutral release point base is screen center (player view)
-	const releaseYBase = height * 0.5
-	// releaseY will be adjusted by camera pitch (cameraPitch is normalized)
-	// pitchOffset moves the release point up/down: positive cameraPitch -> move down
-	const pitchOffset = cameraPitch * height * 0.20
-	const releaseY = releaseYBase + pitchOffset
+	// Neutral release point: fixed screen center (player view)
+	// IMPORTANT: release point must NOT move with cameraPitch — it is the visual origin
+	const releaseY = height * 0.5
 	const horizonY = height * 0.30
 	const baseFarGroundY = height * 0.64
 
@@ -29,19 +26,14 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 
 	// dynamic farGroundY influenced by camera pitch (smaller effect than release pitch)
 	const groundPitchOffset = cameraPitch * height * 0.10
-	// incorporate launchAngle for downhill throws (negative launchAngles)
-	const launchOffset = (launchAngle < 0) ? Math.min(Math.abs(launchAngle) / 15, 1) * height * 0.27 : 0
-	const farGroundY = clamp(baseFarGroundY + pitchOffset + launchOffset, height * 0.52, height * 0.92)
+	// far ground Y influenced only by camera pitch (NOT by launchAngle)
+	const farGroundY = clamp(baseFarGroundY + groundPitchOffset, height * 0.52, height * 0.92)
 
 	function getLandingY() {
 		const baseLanding = baseFarGroundY
 		const pitchOff = groundPitchOffset * 0.8 // slightly reduced effect here
-		let launchOff = 0
-		if (launchAngle < 0) {
-			const downhill = Math.min(Math.abs(launchAngle) / 15, 1)
-			launchOff = downhill * height * 0.27
-		}
-		return clamp(baseLanding + pitchOff + launchOff, height * 0.52, height * 0.92)
+		// NOTE: landingY must NOT depend on launchAngle — launchAngle only affects flightModel heights
+		return clamp(baseLanding + pitchOff, height * 0.52, height * 0.92)
 	}
 
 	return flightPoints.map((p, index) => {
