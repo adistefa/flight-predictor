@@ -4,8 +4,8 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v))
 }
 
-export default function useDeviceOrientation({ smoothing = 0.85, maxAngle = 30 } = {}) {
-  const [rawPitch, setRawPitch] = useState(0)
+export default function useDeviceOrientation({ smoothing = 0.85, launchSmoothing = 0.75, maxAngle = 30 } = {}) {
+  const [rawPitchDegrees, setRawPitchDegrees] = useState(0)
   const smoothedRef = useRef(0)
   const [cameraPitchNormalized, setCameraPitchNormalized] = useState(0)
   const [available, setAvailable] = useState(!!window && 'DeviceOrientationEvent' in window)
@@ -14,6 +14,11 @@ export default function useDeviceOrientation({ smoothing = 0.85, maxAngle = 30 }
   )
   const [granted, setGranted] = useState(false)
 
+  // launch calibration / smoothing
+  const [launchZeroPitch, setLaunchZeroPitch] = useState(0)
+  const [calibratedPitchDegrees, setCalibratedPitchDegrees] = useState(0)
+  const launchSmoothedRef = useRef(0)
+
   useEffect(() => {
     let mounted = true
 
@@ -21,15 +26,22 @@ export default function useDeviceOrientation({ smoothing = 0.85, maxAngle = 30 }
       // Use `beta` for front/back tilt. Many devices supply `beta` in degrees.
       const beta = typeof e.beta === 'number' ? e.beta : 0
 
-      // Normalize so that: camera DOWN -> negative, camera UP -> positive
-      // We invert beta to try to match that convention and clamp around maxAngle
+      // raw degrees
+      setRawPitchDegrees(beta)
+
+      // Normalize for perspective: camera DOWN -> negative, camera UP -> positive
       const normalized = clamp((-beta) / maxAngle, -1, 1)
-
-      setRawPitch(beta)
-
-      // simple exponential smoothing
       smoothedRef.current = smoothedRef.current * smoothing + normalized * (1 - smoothing)
       if (mounted) setCameraPitchNormalized(smoothedRef.current)
+
+      // calibrated launch degrees (raw minus zero) and smoothing
+      const calibrated = beta - (launchZeroPitch || 0)
+      // clamp to -15..30
+      const clampedCal = clamp(calibrated, -15, 30)
+      // smoothing for launch angle
+      launchSmoothedRef.current = launchSmoothedRef.current * launchSmoothing + clampedCal * (1 - launchSmoothing)
+      const withDeadzone = Math.abs(launchSmoothedRef.current) <= 0.75 ? 0 : launchSmoothedRef.current
+      if (mounted) setCalibratedPitchDegrees(withDeadzone)
     }
 
     function attach() {
@@ -73,10 +85,12 @@ export default function useDeviceOrientation({ smoothing = 0.85, maxAngle = 30 }
   }
 
   return {
-    rawPitch,
+    rawPitchDegrees,
     cameraPitchNormalized,
+    calibratedPitchDegrees,
     requestPermissionNeeded: permissionNeeded && !granted,
     requestPermission,
     available,
+    calibrateLaunchZero: () => setLaunchZeroPitch(rawPitchDegrees),
   }
 }

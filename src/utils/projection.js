@@ -1,4 +1,4 @@
-export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0) {
+export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0, launchAngle = 8) {
 	if (!flightPoints || flightPoints.length === 0) return []
 
 	const maxDistance = Math.max(...flightPoints.map((p) => p.distanceMeters || p.distance || 0)) || 1
@@ -8,9 +8,9 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 	const horizonY = height * 0.30
 	const baseFarGroundY = height * 0.64
 
-	// stronger lateral and smaller height to emphasize depth over height
-	const lateralScale = width * 0.05
-	const heightScale = height * 0.013
+	// stronger lateral and taller height to emphasize depth over height
+	const lateralScale = width * 0.075
+	const heightScale = height * 0.022
 
 	const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 	const smoothstep = (edge0, edge1, x) => {
@@ -23,7 +23,20 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 
 	// dynamic farGroundY influenced by camera pitch
 	const pitchOffset = cameraPitch * height * 0.10
-	const farGroundY = clamp(baseFarGroundY + pitchOffset, height * 0.52, height * 0.72)
+	// incorporate launchAngle for downhill throws (negative launchAngles)
+	const launchOffset = (launchAngle < 0) ? Math.min(Math.abs(launchAngle) / 15, 1) * height * 0.27 : 0
+	const farGroundY = clamp(baseFarGroundY + pitchOffset + launchOffset, height * 0.52, height * 0.92)
+
+	function getLandingY() {
+		const baseLanding = baseFarGroundY
+		const pitchOff = pitchOffset * 0.8 // slightly reduced effect here
+		let launchOff = 0
+		if (launchAngle < 0) {
+			const downhill = Math.min(Math.abs(launchAngle) / 15, 1)
+			launchOff = downhill * height * 0.27
+		}
+		return clamp(baseLanding + pitchOff + launchOff, height * 0.52, height * 0.92)
+	}
 
 	return flightPoints.map((p, index) => {
 		const depth = Math.min(1, Math.max(0, (p.distanceMeters || p.distance || 0) / maxDistance))
@@ -39,8 +52,9 @@ export function projectFlightPoints(flightPoints, width, height, cameraPitch = 0
 			return { x: centerX, y: releaseY, depth: 0 }
 		}
 
-		// map ground to a farGroundY (below horizon) so landing stays visible
-		const groundY = releaseY + (farGroundY - releaseY) * visualDepth
+		// map ground to a landingY (below horizon) so landing stays visible
+		const landingY = getLandingY()
+		const groundY = releaseY + (landingY - releaseY) * visualDepth
 
 		// perspective factor reduces lateral/height with depth
 		const perspective = 1 - visualDepth * 0.45

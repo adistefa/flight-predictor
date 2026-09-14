@@ -22,8 +22,8 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 	const { cameraPitchNormalized, requestPermissionNeeded, requestPermission } = useDeviceOrientation()
 
 	const projected = useMemo(
-		() => projectFlightPoints(flightPoints, size.w, size.h, cameraPitchNormalized),
-		[flightPoints, size, cameraPitchNormalized]
+		() => projectFlightPoints(flightPoints, size.w, size.h, cameraPitchNormalized, launchAngle),
+		[flightPoints, size, cameraPitchNormalized, launchAngle]
 	)
 
 	if (!projected || projected.length === 0) return null
@@ -77,7 +77,7 @@ export default function FlightOverlay({ disc, releaseAngle, launchAngle }) {
 			{ distanceMeters: meters, lateral: 0, height: 0 },
 			{ distanceMeters: Math.min(totalDistanceMeters, meters + 0.1), lateral: 0, height: 0 },
 		]
-		const proj = projectFlightPoints(pts, size.w, size.h, cameraPitchNormalized)
+		const proj = projectFlightPoints(pts, size.w, size.h, cameraPitchNormalized, launchAngle)
 		return { point: proj[2], next: proj[3] }
 	}
 

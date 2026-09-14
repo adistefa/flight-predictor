@@ -19,7 +19,7 @@ for (const cp of cameraPitches) {
   console.log('--- cameraPitch', cp, '---')
   for (const a of angles) {
     const pts = generateFlightPoints(disc, a, launchAngle)
-    const projected = projectFlightPoints(pts, width, height, cp)
+    const projected = projectFlightPoints(pts, width, height, cp, launchAngle)
     const p0 = projected[0]
     console.log('releaseAngle', a, '=>', p0.x.toFixed(3), p0.y.toFixed(3))
   }
