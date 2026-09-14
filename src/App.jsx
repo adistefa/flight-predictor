@@ -14,9 +14,9 @@ export default function App() {
   const [manualLaunchAngle, setManualLaunchAngle] = useState(8)
   const [launchMode, setLaunchMode] = useState('auto') // 'auto' | 'manual'
 
-  const { cameraPitchNormalized, calibratedPitchDegrees, requestPermissionNeeded, requestPermission, calibrateLaunchZero, available } = useDeviceOrientation()
+  const { cameraPitchNormalized, calibratedPitchDegrees, requestPermissionNeeded, requestPermission, calibrateLaunchZero, hasOrientationData, permissionState } = useDeviceOrientation()
 
-  const effectiveLaunchAngle = launchMode === 'auto' && available ? calibratedPitchDegrees : manualLaunchAngle
+  const effectiveLaunchAngle = launchMode === 'auto' && hasOrientationData && permissionState === 'granted' ? calibratedPitchDegrees : manualLaunchAngle
 
   const discs = discsData || []
 
@@ -53,6 +53,15 @@ export default function App() {
         <div className="bottom-area" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <ReleaseAngleControl value={releaseAngle} onChange={setReleaseAngle} />
         </div>
+      </div>
+
+      {/* Temporary Motion Debug overlay */}
+      <div style={{ position: 'fixed', right: 10, top: 10, zIndex: 9999, background: 'rgba(0,0,0,0.45)', color: '#fff', padding: 10, borderRadius: 8, fontFamily: 'monospace', fontSize: 12 }}>
+        <div><strong>MOTION DEBUG</strong></div>
+        <div>perm: {permissionState}</div>
+        <div>event: {hasOrientationData ? 'yes' : 'no'}</div>
+        <div>cal: {calibratedPitchDegrees ? `${calibratedPitchDegrees.toFixed(2)}°` : '0.00°'}</div>
+        <div>auto: {launchMode === 'auto' ? 'ON' : 'OFF'}</div>
       </div>
     </div>
   )

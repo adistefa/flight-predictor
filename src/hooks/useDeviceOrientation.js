@@ -6,16 +6,15 @@ function clamp(v, a, b) {
 
 export default function useDeviceOrientation({ smoothing = 0.85, launchSmoothing = 0.75, maxAngle = 30 } = {}) {
   const [rawPitchDegrees, setRawPitchDegrees] = useState(0)
+  const latestRawPitchRef = useRef(0)
   const smoothedRef = useRef(0)
   const [cameraPitchNormalized, setCameraPitchNormalized] = useState(0)
-  const [available, setAvailable] = useState(!!window && 'DeviceOrientationEvent' in window)
-  const [permissionNeeded, setPermissionNeeded] = useState(
-    typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'
-  )
-  const [granted, setGranted] = useState(false)
 
-  // launch calibration / smoothing
-  const [launchZeroPitch, setLaunchZeroPitch] = useState(0)
+  const [permissionState, setPermissionState] = useState('unknown') // 'unknown'|'granted'|'denied'
+  const [hasOrientationData, setHasOrientationData] = useState(false)
+
+  // calibration refs
+  const zeroPitchRef = useRef(null)
   const [calibratedPitchDegrees, setCalibratedPitchDegrees] = useState(0)
   const launchSmoothedRef = useRef(0)
 
@@ -23,74 +22,96 @@ export default function useDeviceOrientation({ smoothing = 0.85, launchSmoothing
     let mounted = true
 
     function handle(e) {
-      // Use `beta` for front/back tilt. Many devices supply `beta` in degrees.
       const beta = typeof e.beta === 'number' ? e.beta : 0
+      const gamma = typeof e.gamma === 'number' ? e.gamma : 0
 
-      // raw degrees
+      // log every event for debugging
+      // eslint-disable-next-line no-console
+      console.log('orientation event', { alpha: e.alpha, beta, gamma })
+
+      // update latest raw
+      latestRawPitchRef.current = beta
       setRawPitchDegrees(beta)
 
-      // Normalize for perspective: camera DOWN -> negative, camera UP -> positive
+      // mark that we have received at least one event
+      if (!hasOrientationData) setHasOrientationData(true)
+
+      // perspective normalized (do NOT invert blindly)
       const normalized = clamp((-beta) / maxAngle, -1, 1)
       smoothedRef.current = smoothedRef.current * smoothing + normalized * (1 - smoothing)
       if (mounted) setCameraPitchNormalized(smoothedRef.current)
 
-      // calibrated launch degrees (raw minus zero) and smoothing
-      const calibrated = beta - (launchZeroPitch || 0)
-      // clamp to -15..30
-      const clampedCal = clamp(calibrated, -15, 30)
-      // smoothing for launch angle
-      launchSmoothedRef.current = launchSmoothedRef.current * launchSmoothing + clampedCal * (1 - launchSmoothing)
-      const withDeadzone = Math.abs(launchSmoothedRef.current) <= 0.75 ? 0 : launchSmoothedRef.current
-      if (mounted) setCalibratedPitchDegrees(withDeadzone)
+      // calibrated launch degrees
+      const zero = zeroPitchRef.current != null ? zeroPitchRef.current : beta
+      let calibrated = beta - zero
+      calibrated = clamp(calibrated, -15, 30)
+      // dead zone
+      if (Math.abs(calibrated) <= 0.75) calibrated = 0
+      // smoothing for launch
+      launchSmoothedRef.current = launchSmoothedRef.current * launchSmoothing + calibrated * (1 - launchSmoothing)
+      const smoothedLaunch = launchSmoothedRef.current
+      if (mounted) setCalibratedPitchDegrees(smoothedLaunch)
     }
 
-    function attach() {
+    function attachListener() {
       if (!('DeviceOrientationEvent' in window)) return
-      window.addEventListener('deviceorientation', handle, { passive: true })
-      setAvailable(true)
+      // use capture true per instructions
+      window.addEventListener('deviceorientation', handle, true)
     }
 
-    // If permission is required but not yet granted, do not attach automatically
-    if (permissionNeeded && !granted) {
-      // wait for user to call requestPermission
+    // Attach if permission granted or not required
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // iOS-like: only attach after explicit grant
+      if (permissionState === 'granted') attachListener()
     } else {
-      attach()
-      setGranted(true)
+      // no permission API -> attach directly
+      attachListener()
+      setPermissionState('granted')
     }
 
     return () => {
       mounted = false
-      window.removeEventListener('deviceorientation', handle)
+      try {
+        window.removeEventListener('deviceorientation', handle, true)
+      } catch (e) {}
     }
-  }, [permissionNeeded, granted, smoothing, maxAngle])
+    // intentionally exclude zeroPitchRef and latestRawPitchRef to avoid reattaching
+  }, [permissionState, smoothing, launchSmoothing, maxAngle, hasOrientationData])
 
   async function requestPermission() {
     if (typeof DeviceOrientationEvent === 'undefined' || typeof DeviceOrientationEvent.requestPermission !== 'function') {
+      setPermissionState('denied')
       return false
     }
     try {
       const result = await DeviceOrientationEvent.requestPermission()
       if (result === 'granted') {
-        setGranted(true)
-        setPermissionNeeded(false)
-        // attach listener by toggling effect
+        setPermissionState('granted')
+        // attach listener now
         const ev = new Event('deviceorientation')
         window.dispatchEvent(ev)
         return true
       }
+      setPermissionState('denied')
     } catch (err) {
-      // permission denied or not supported
+      setPermissionState('denied')
     }
     return false
   }
 
+  function calibrateLaunchZero() {
+    // use latest raw pitch ref for robust calibration
+    zeroPitchRef.current = latestRawPitchRef.current
+  }
+
   return {
-    rawPitchDegrees,
+    rawPitchDegrees: latestRawPitchRef.current,
     cameraPitchNormalized,
     calibratedPitchDegrees,
-    requestPermissionNeeded: permissionNeeded && !granted,
+    permissionState,
+    requestPermissionNeeded: permissionState === 'unknown',
     requestPermission,
-    available,
-    calibrateLaunchZero: () => setLaunchZeroPitch(rawPitchDegrees),
+    hasOrientationData,
+    calibrateLaunchZero,
   }
 }
